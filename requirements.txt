@@ -1,0 +1,16 @@
+flask
+flask-cors
+flask-socketio
+bsedata
+redis
+dataclasses-json
+pytest
+pytest-mock
+pytest-cov
+pytest-xdist
+msgpack
+locust
+psutil
+websocket-client
+gunicorn
+gevent

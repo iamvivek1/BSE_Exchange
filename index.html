@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BSE Exchange — Live Stock Trading</title>
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    /* Extra visual polish */
+    body { background: linear-gradient(180deg,#071124 0%,#0b1220 60%); }
+    .glass { backdrop-filter: blur(8px) saturate(140%); background-color: rgba(255,255,255,0.03); }
+    .glow { box-shadow: 0 6px 30px rgba(99,102,241,0.08), inset 0 1px 0 rgba(255,255,255,0.02); }
+    .sparkline { height: 36px; width: 120px; }
+    .ticker-up { color: #22c55e; }
+    .ticker-down { color: #ef4444; }
+    
+    /* Performance optimization animations */
+    @keyframes pulseAccent { 
+      0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.12);} 
+      70% { box-shadow: 0 0 0 12px rgba(99,102,241,0);} 
+      100% { box-shadow: 0 0 0 0 rgba(99,102,241,0);} 
+    }
+    .accent-pulse { animation: pulseAccent 2.6s infinite; }
+    
+    @keyframes priceIncrease {
+      0% { background-color: rgba(34, 197, 94, 0.2); transform: scale(1); }
+      50% { background-color: rgba(34, 197, 94, 0.4); transform: scale(1.02); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    
+    @keyframes priceDecrease {
+      0% { background-color: rgba(239, 68, 68, 0.2); transform: scale(1); }
+      50% { background-color: rgba(239, 68, 68, 0.4); transform: scale(1.02); }
+      100% { background-color: transparent; transform: scale(1); }
+    }
+    
+    .price-increase { animation: priceIncrease 0.6s ease-out; }
+    .price-decrease { animation: priceDecrease 0.6s ease-out; }
+    
+    /* Loading states */
+    .loading { position: relative; }
+    .loading::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    /* Connection quality indicators */
+    .connection-excellent { color: #22c55e; }
+    .connection-good { color: #eab308; }
+    .connection-poor { color: #f97316; }
+    .connection-bad { color: #ef4444; }
+    
+    /* Smooth transitions for all interactive elements */
+    .market-row, button, input, select {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* Enhanced hover effects */
+    .market-row:hover {
+      transform: translateX(2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Validation states */
+    .border-red-500 {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+    }
+    
+    .border-green-500 {
+      border-color: #22c55e !important;
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3);
+    }
+    
+    /* Loading button states */
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    
+    /* Stale data indicator */
+    .stale-data {
+      opacity: 0.6;
+      position: relative;
+    }
+    
+    .stale-data::before {
+      content: '⚠';
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      font-size: 10px;
+      color: #eab308;
+    }
+    
+    /* Performance metrics display */
+    .perf-metrics {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Chart optimizations */
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+    
+    /* Additional performance optimizations */
+    .market-row {
+      contain: layout style paint;
+      will-change: transform;
+    }
+    
+    .price-cell {
+      contain: layout;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    /* Reduce repaints for frequently updated elements */
+    #selected-price, #selected-change {
+      contain: layout style;
+      will-change: contents;
+    }
+    
+    /* Optimize scrolling performance */
+    #market-list, #openOrders, #history {
+      contain: layout;
+      overflow-anchor: none;
+    }
+    
+    /* GPU acceleration for animations */
+    .loading-indicator, .toast-message {
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+    
+    /* Optimize font rendering */
+    body {
+      text-rendering: optimizeSpeed;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* Reduce layout thrashing */
+    .flex {
+      contain: layout;
+    }
+    
+    /* Connection quality specific styles */
+    .connection-excellent .connection-dot { background-color: #22c55e; }
+    .connection-good .connection-dot { background-color: #eab308; }
+    .connection-poor .connection-dot { background-color: #f97316; }
+    .connection-bad .connection-dot { background-color: #ef4444; }
+    
+    /* Enhanced loading states */
+    .loading-skeleton {
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    
+    /* Optimized table layouts for order book */
+    .order-book-table {
+      table-layout: fixed;
+      width: 100%;
+    }
+    
+    /* Reduce paint complexity */
+    .glass {
+      isolation: isolate;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-200 antialiased">
+  <div class="max-w-[1400px] mx-auto px-6 py-8">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-500 shadow-lg">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 7v10" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18 7v10" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-semibold">BSE Live Exchange</h1>
+          <p class="text-sm text-slate-400">Real-time BSE Stock Data</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="hidden md:flex items-center gap-2 text-sm text-slate-300 glass px-3 py-2 rounded-lg">Balance: <span class="ml-2 font-medium">₹1,24,832.22</span></div>
+        <button class="px-3 py-2 rounded-lg glass glow hover:scale-[1.02] hover:bg-slate-700/50 transition-transform transition-colors">Connect Account</button>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-12 gap-6">
+      <!-- Left Column: Market List + Order Book -->
+      <section class="col-span-12 lg:col-span-3 space-y-4">
+        <div class="p-4 rounded-2xl glass glow">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">BSE Markets</h2>
+            <div class="text-sm text-slate-400">Live</div>
+          </div>
+
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <input type="text" id="search-market" placeholder="Search for a stock..." class="w-full p-2 pl-10 mb-2 bg-slate-800/50 rounded-lg">
+            <button id="market-dropdown-button" class="w-full p-2 bg-slate-800/50 rounded-lg text-left">
+              Select Market
+            </button>
+            <div id="market-dropdown-panel" class="absolute z-10 w-full mt-1 bg-slate-800 rounded-lg shadow-lg hidden">
+              <div id="market-list" class="space-y-1 p-2 max-h-60 overflow-y-auto">
+                <!-- market items appended here by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl glass glow">
+          <h3 class="text-lg font-semibold mb-2">Order Book</h3>
+          <div class="grid grid-cols-2 gap-3 text-sm text-slate-300">
+            <div class="space-y-2">
+              <div class="text-xs text-slate-400">Asks</div>
+              <div id="asks" class="space-y-1 max-h-40 overflow-auto"></div>
+            </div>
+            <div class="space-y-2">
+              <div class="text-xs text-slate-400">Bids</div>
+              <div id="bids" class="space-y-1 max-h-40 overflow-auto"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl glass glow">
+          <h3 class="text-lg font-semibold mb-2">Quick Orders</h3>
+          <div class="flex gap-2">
+            <button id="quick-buy-button" class="flex-1 py-2 rounded-lg bg-gradient-to-r from-green-500/30 to-green-400/10 text-green-300 hover:opacity-80 transition-opacity">Buy</button>
+            <button id="quick-sell-button" class="flex-1 py-2 rounded-lg bg-gradient-to-r from-red-600/20 to-red-500/5 text-red-300 hover:opacity-80 transition-opacity">Sell</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Center Column: Chart + Trade Form -->
+      <section class="col-span-12 lg:col-span-6 space-y-4">
+        <div class="p-4 rounded-2xl glass glow">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="text-xs text-slate-400">Selected Stock</div>
+              <div class="flex items-center gap-3">
+                <div id="selected-symbol" class="text-2xl font-semibold">Loading...</div>
+                <div id="selected-price" class="text-slate-300 text-lg">₹0.00</div>
+                <div id="selected-change" class="text-sm px-2 py-1 rounded-md bg-slate-800/40 text-slate-200">0%</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="text-sm text-slate-400">Timeframe</div>
+              <select id="timeframe" class="bg-transparent border border-slate-700 rounded-lg px-3 py-1 text-sm">
+                <option>1m</option>
+                <option selected>5m</option>
+                <option>15m</option>
+                <option>1h</option>
+                <option>1d</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="h-[360px]">
+            <canvas id="mainChart" class="w-full h-full rounded-lg"></canvas>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl glass glow flex flex-col md:flex-row gap-4">
+          <form id="tradeForm" class="flex-1 space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="text-sm text-slate-400">Side</div>
+              <div class="ml-auto flex gap-2">
+                <button type="button" data-side="buy" class="px-3 py-1 rounded-md bg-green-600/10 text-green-300">Buy</button>
+                <button type="button" data-side="sell" class="px-3 py-1 rounded-md bg-red-600/10 text-red-300">Sell</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <input id="price" type="number" step="0.01" placeholder="Price" class="bg-transparent border border-slate-700 rounded-lg px-3 py-2 w-full" />
+              <input id="amount" type="number" step="0.0001" placeholder="Amount" class="bg-transparent border border-slate-700 rounded-lg px-3 py-2 w-full" />
+            </div>
+            <div class="flex items-center justify-between text-sm text-slate-400">
+              <div>Est. Value</div>
+              <div id="estValue">₹0.00</div>
+            </div>
+            <div class="flex gap-2">
+              <button id="submitBuy" class="flex-1 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-400 text-black font-semibold hover:opacity-90 transition-opacity">Place Buy</button>
+              <button id="submitSell" class="flex-1 py-2 rounded-lg bg-gradient-to-r from-red-500 to-rose-400 text-black font-semibold hover:opacity-90 transition-opacity">Place Sell</button>
+            </div>
+          </form>
+
+          <div class="w-full md:w-64 p-3 rounded-lg glass">
+            <div class="text-sm text-slate-400">Open Orders</div>
+            <div id="openOrders" class="mt-3 space-y-2 text-sm text-slate-200 max-h-44 overflow-auto"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Portfolio + Trade History -->
+      <section class="col-span-12 lg:col-span-3 space-y-4">
+        <div class="p-4 rounded-2xl glass glow">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-semibold">Portfolio</h3>
+            <div id="portfolio-total-value" class="text-sm text-slate-400">~₹0</div>
+          </div>
+          <div id="portfolio-list" class="space-y-3 text-sm">
+            <!-- portfolio items appended here by JS -->
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl glass glow">
+          <div class="flex items-center justify-between mb-2"><h3 class="text-lg font-semibold">Trade History</h3><div class="text-sm text-slate-400">Recent</div></div>
+          <div id="history" class="space-y-2 text-sm max-h-48 overflow-auto"></div>
+        </div>
+
+        <div class="p-4 rounded-2xl glass glow">
+          <div class="flex items-center justify-between mb-2"><h3 class="text-lg font-semibold">Watchlist</h3><div class="text-sm text-slate-400">Stars</div></div>
+          <div id="watchlist" class="space-y-2 text-sm text-slate-200"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="mt-8 text-center text-slate-500 text-sm">BSE Live Data • Real-time stock prices from Bombay Stock Exchange</footer>
+  </div>
+
+  <script src="bse_frontend.js"></script>
+</body>
+</html>

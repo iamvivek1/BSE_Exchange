@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSE System Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+        
+        .status-bar {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-healthy { background-color: #4caf50; }
+        .status-warning { background-color: #ff9800; }
+        .status-critical { background-color: #f44336; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
+        }
+        
+        .card h3 {
+            margin-bottom: 1rem;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .metric-item {
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .metric-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+        
+        .health-checks {
+            display: grid;
+            gap: 0.5rem;
+        }
+        
+        .health-check {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #ddd;
+        }
+        
+        .health-check.healthy { border-left-color: #4caf50; }
+        .health-check.warning { border-left-color: #ff9800; }
+        .health-check.critical { border-left-color: #f44336; }
+        
+        .health-check-name {
+            font-weight: 500;
+        }
+        
+        .health-check-value {
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .last-updated {
+            text-align: center;
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>BSE Data Optimization - System Health Dashboard</h1>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div class="status-dot" id="overallStatusDot"></div>
+            <span id="overallStatus">Loading...</span>
+        </div>
+        <div id="lastUpdated" class="last-updated"></div>
+    </div>
+    
+    <div class="dashboard-grid">
+        <!-- System Metrics Card -->
+        <div class="card">
+            <h3>System Performance</h3>
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <div class="metric-value" id="cpuUsage">-</div>
+                    <div class="metric-label">CPU Usage</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="memoryUsage">-</div>
+                    <div class="metric-label">Memory Usage</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="diskUsage">-</div>
+                    <div class="metric-label">Disk Usage</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="activeConnections">-</div>
+                    <div class="metric-label">Connections</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="systemChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Application Metrics Card -->
+        <div class="card">
+            <h3>Application Performance</h3>
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <div class="metric-value" id="apiRequests">-</div>
+                    <div class="metric-label">API Req/Min</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="wsConnections">-</div>
+                    <div class="metric-label">WebSocket</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="cacheHitRate">-</div>
+                    <div class="metric-label">Cache Hit Rate</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="responseTime">-</div>
+                    <div class="metric-label">Avg Response</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="applicationChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Health Checks Card -->
+        <div class="card">
+            <h3>Health Checks</h3>
+            <div class="health-checks" id="healthChecks">
+                <div class="loading">Loading health checks...</div>
+            </div>
+        </div>
+        
+        <!-- Redis Metrics Card -->
+        <div class="card">
+            <h3>Redis Performance</h3>
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <div class="metric-value" id="redisMemory">-</div>
+                    <div class="metric-label">Memory (MB)</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="redisClients">-</div>
+                    <div class="metric-label">Connected Clients</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chart configurations
+        const chartConfig = {
+            type: 'line',
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    },
+                    x: {
+                        display: false
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 2
+                    },
+                    line: {
+                        tension: 0.4
+                    }
+                }
+            }
+        };
+        
+        // Initialize charts
+        const systemChart = new Chart(document.getElementById('systemChart'), {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#ff6384',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)'
+                    },
+                    {
+                        label: 'Memory %',
+                        data: [],
+                        borderColor: '#36a2eb',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)'
+                    }
+                ]
+            }
+        });
+        
+        const applicationChart = new Chart(document.getElementById('applicationChart'), {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Cache Hit Rate %',
+                        data: [],
+                        borderColor: '#4bc0c0',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)'
+                    },
+                    {
+                        label: 'Error Rate %',
+                        data: [],
+                        borderColor: '#ff9f40',
+                        backgroundColor: 'rgba(255, 159, 64, 0.1)'
+                    }
+                ]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    },
+                    x: {
+                        display: false
+                    }
+                }
+            }
+        });
+        
+        // Update functions
+        function updateMetrics() {
+            fetch('/api/metrics/current')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Metrics error:', data.error);
+                        return;
+                    }
+                    
+                    const sys = data.system;
+                    const app = data.application;
+                    
+                    // Update system metrics
+                    document.getElementById('cpuUsage').textContent = sys.cpu_percent.toFixed(1) + '%';
+                    document.getElementById('memoryUsage').textContent = sys.memory_percent.toFixed(1) + '%';
+                    document.getElementById('diskUsage').textContent = sys.disk_percent.toFixed(1) + '%';
+                    document.getElementById('activeConnections').textContent = sys.active_connections;
+                    
+                    // Update application metrics
+                    document.getElementById('apiRequests').textContent = app.api_requests_per_minute;
+                    document.getElementById('wsConnections').textContent = app.websocket_connections;
+                    document.getElementById('cacheHitRate').textContent = app.cache_hit_rate.toFixed(1) + '%';
+                    document.getElementById('responseTime').textContent = app.avg_response_time_ms.toFixed(0) + 'ms';
+                    
+                    // Update Redis metrics
+                    document.getElementById('redisMemory').textContent = sys.redis_memory_mb.toFixed(1);
+                    document.getElementById('redisClients').textContent = sys.redis_connected_clients;
+                })
+                .catch(error => {
+                    console.error('Error fetching metrics:', error);
+                });
+        }
+        
+        function updateHealthStatus() {
+            fetch('/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    // Update overall status
+                    const statusDot = document.getElementById('overallStatusDot');
+                    const statusText = document.getElementById('overallStatus');
+                    
+                    statusDot.className = 'status-dot status-' + data.status;
+                    statusText.textContent = data.message;
+                    
+                    // Update last updated time
+                    document.getElementById('lastUpdated').textContent = 
+                        'Last updated: ' + new Date(data.last_updated).toLocaleTimeString();
+                    
+                    // Update health checks
+                    const checksContainer = document.getElementById('healthChecks');
+                    checksContainer.innerHTML = '';
+                    
+                    Object.entries(data.checks).forEach(([name, check]) => {
+                        const checkElement = document.createElement('div');
+                        checkElement.className = 'health-check ' + check.status;
+                        
+                        const nameElement = document.createElement('div');
+                        nameElement.className = 'health-check-name';
+                        nameElement.textContent = name.replace(/_/g, ' ').toUpperCase();
+                        
+                        const valueElement = document.createElement('div');
+                        valueElement.className = 'health-check-value';
+                        
+                        if (name.includes('rate') || name.includes('percent')) {
+                            valueElement.textContent = check.value.toFixed(1) + '%';
+                        } else if (name.includes('time')) {
+                            valueElement.textContent = check.value.toFixed(0) + 'ms';
+                        } else {
+                            valueElement.textContent = check.value;
+                        }
+                        
+                        checkElement.appendChild(nameElement);
+                        checkElement.appendChild(valueElement);
+                        checksContainer.appendChild(checkElement);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching health status:', error);
+                });
+        }
+        
+        function updateCharts() {
+            // Update system chart
+            fetch('/api/metrics/system')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+                    const cpuData = data.map(d => d.cpu_percent);
+                    const memoryData = data.map(d => d.memory_percent);
+                    
+                    systemChart.data.labels = labels;
+                    systemChart.data.datasets[0].data = cpuData;
+                    systemChart.data.datasets[1].data = memoryData;
+                    systemChart.update('none');
+                })
+                .catch(error => console.error('Error updating system chart:', error));
+            
+            // Update application chart
+            fetch('/api/metrics/application')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+                    const cacheHitData = data.map(d => d.cache_hit_rate);
+                    const errorRateData = data.map(d => d.error_rate_percent);
+                    
+                    applicationChart.data.labels = labels;
+                    applicationChart.data.datasets[0].data = cacheHitData;
+                    applicationChart.data.datasets[1].data = errorRateData;
+                    applicationChart.update('none');
+                })
+                .catch(error => console.error('Error updating application chart:', error));
+        }
+        
+        // Initialize dashboard
+        function initDashboard() {
+            updateMetrics();
+            updateHealthStatus();
+            updateCharts();
+            
+            // Set up periodic updates
+            setInterval(updateMetrics, 5000);      // Every 5 seconds
+            setInterval(updateHealthStatus, 10000); // Every 10 seconds
+            setInterval(updateCharts, 30000);       // Every 30 seconds
+        }
+        
+        // Start dashboard when page loads
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
