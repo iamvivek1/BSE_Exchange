@@ -6,13 +6,13 @@ StockLive is a real-time stock trading platform for the Bombay Stock Exchange (B
 
 Here are some screenshots of the application in action:
 
-![Screenshot 1](screenshot/Screenshot (168).png)
-![Screenshot 2](screenshot/Screenshot (169).png)
-![Screenshot 3](screenshot/Screenshot (170).png)
-![Screenshot 4](screenshot/Screenshot (171).png)
-![Screenshot 5](screenshot/Screenshot (172).png)
-![Screenshot 6](screenshot/Screenshot (173).png)
-![Screenshot 7](screenshot/Screenshot (174).png)
+![Screenshot 1](screenshot/Screenshot%20(168).png)
+![Screenshot 2](screenshot/Screenshot%20(169).png)
+![Screenshot 3](screenshot/Screenshot%20(170).png)
+![Screenshot 4](screenshot/Screenshot%20(171).png)
+![Screenshot 5](screenshot/Screenshot%20(172).png)
+![Screenshot 6](screenshot/Screenshot%20(173).png)
+![Screenshot 7](screenshot/Screenshot%20(174).png)
 
 ## Features
 
